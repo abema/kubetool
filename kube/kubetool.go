@@ -9,8 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"k8s.io/kubernetes/pkg/api/v1"
-
 	"github.com/fatih/color"
 	"github.com/olekukonko/tablewriter"
 )
@@ -121,7 +119,7 @@ func (t *Tool) PrintPodList(rcname string) (err error) {
 			w.Append([]string{
 				pod.Name,
 				status,
-				strconv.Itoa(pod.Status.ContainerStatuses[i].RestartCount),
+				strconv.Itoa(int(pod.Status.ContainerStatuses[i].RestartCount)),
 				pod.Status.PodIP,
 				pod.Status.HostIP,
 				img,
@@ -241,7 +239,7 @@ func (t *Tool) FixVersion(name string) (err error) {
 	if err != nil {
 		return
 	}
-	pods := []v1.Pod{}
+	pods := []Pod{}
 	rspec := rc.Spec.Template.Spec
 	for _, pod := range allPods {
 		// when containers has different size, move on
@@ -279,10 +277,10 @@ func (t *Tool) FixVersion(name string) (err error) {
 }
 
 // reloadPods deletes pods one by one with waiting created pod become available.
-func (t *Tool) reloadPods(rc v1.ReplicationController, pods []v1.Pod) (err error) {
+func (t *Tool) reloadPods(rc ReplicationController, pods []Pod) (err error) {
 
-	livePods := make([]v1.Pod, 0, len(pods))
-	deadPods := make([]v1.Pod, 0, len(pods))
+	livePods := make([]Pod, 0, len(pods))
+	deadPods := make([]Pod, 0, len(pods))
 
 	deletedPods := make([]string, 0, len(pods))
 
@@ -369,7 +367,7 @@ func parseImage(img string) (name string, version string) {
 }
 
 // pickContainer from pods.
-func pickContainer(rc v1.ReplicationController, container string) (c v1.Container, err error) {
+func pickContainer(rc ReplicationController, container string) (c Container, err error) {
 	cs := rc.Spec.Template.Spec.Containers
 	if container == "" {
 		return cs[0], nil
@@ -383,9 +381,9 @@ func pickContainer(rc v1.ReplicationController, container string) (c v1.Containe
 }
 
 // check rc status.
-func (t *Tool) rcAvailable(rc v1.ReplicationController, ignorePods []string) bool {
+func (t *Tool) rcAvailable(rc ReplicationController, ignorePods []string) bool {
 	// check pods count reaches rc desied.
-	total := *rc.Spec.Replicas
+	total := int(*rc.Spec.Replicas)
 	// check all pod status.
 	pods, err := t.kubectl.PodList(rc.Spec.Selector)
 	if err != nil {
@@ -415,7 +413,7 @@ func (t *Tool) rcAvailable(rc v1.ReplicationController, ignorePods []string) boo
 	if availCount > reqNum {
 		return true
 	}
-	log("waiting", blue(strconv.Itoa(reqNum-availCount+1)), "more pod(s) become available. ("+blue(strconv.Itoa(availCount))+"/"+blue(strconv.Itoa(*rc.Spec.Replicas))+")")
+	log("waiting", blue(strconv.Itoa(int(reqNum-availCount+1))), "more pod(s) become available. ("+blue(strconv.Itoa(int(availCount)))+"/"+blue(strconv.Itoa(int(*rc.Spec.Replicas)))+")")
 	return false
 }
 
@@ -429,8 +427,8 @@ func contains(item string, list []string) bool {
 }
 
 // check pod status.
-func (t *Tool) podAvailable(pod v1.Pod) bool {
-	if pod.Status.Phase != v1.PodRunning {
+func (t *Tool) podAvailable(pod Pod) bool {
+	if pod.Status.Phase != PodRunning {
 		return false
 	}
 	for _, cs := range pod.Status.ContainerStatuses {

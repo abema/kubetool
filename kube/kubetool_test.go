@@ -5,8 +5,6 @@ import (
 	"os"
 	"testing"
 
-	"k8s.io/kubernetes/pkg/api/v1"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -111,7 +109,7 @@ func TestReload(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 2, len(news))
 	for i := range news {
-		assert.Equal(t, v1.PodRunning, news[i].Status.Phase)
+		assert.Equal(t, PodRunning, news[i].Status.Phase)
 		assert.True(t, news[i].Status.ContainerStatuses[0].Ready)
 		// must be re-created
 		assert.NotEqual(t, olds[i].Name, news[i].Name)

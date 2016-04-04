@@ -9,8 +9,6 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
-
-	"k8s.io/kubernetes/pkg/api/v1"
 )
 
 // Kubectl executes kubectl as command.
@@ -81,11 +79,11 @@ func (kc *Kubectl) Version() (client string, server string, err error) {
 }
 
 type rcList struct {
-	Items []v1.ReplicationController
+	Items []ReplicationController
 }
 
 // RCList return replication controllers.
-func (kc *Kubectl) RCList() (rcs []v1.ReplicationController, err error) {
+func (kc *Kubectl) RCList() (rcs []ReplicationController, err error) {
 	b, err := kc.Exec("get", "rc", "--output=json")
 	if err != nil {
 		return
@@ -98,7 +96,7 @@ func (kc *Kubectl) RCList() (rcs []v1.ReplicationController, err error) {
 }
 
 // RC return single replication controller.
-func (kc Kubectl) RC(name string) (rc v1.ReplicationController, err error) {
+func (kc Kubectl) RC(name string) (rc ReplicationController, err error) {
 	b, err := kc.Exec("get", "rc", name, "--output=json")
 	if err != nil {
 		return
@@ -116,11 +114,11 @@ func (kc Kubectl) PatchRC(rc string, patch string) (err error) {
 }
 
 type podList struct {
-	Items []v1.Pod
+	Items []Pod
 }
 
 // PodList return pods.
-func (kc *Kubectl) PodList(selector Selector) (pods []v1.Pod, err error) {
+func (kc *Kubectl) PodList(selector Selector) (pods []Pod, err error) {
 	args := []string{"get", "pod", "--output=json"}
 	if selector != nil && len(selector) > 0 {
 		args = append(args, "--selector="+selector.Format())
@@ -135,7 +133,7 @@ func (kc *Kubectl) PodList(selector Selector) (pods []v1.Pod, err error) {
 }
 
 // Pod return single pod.
-func (kc *Kubectl) Pod(name string) (pod v1.Pod, err error) {
+func (kc *Kubectl) Pod(name string) (pod Pod, err error) {
 	b, err := kc.Exec("get", "pod", name, "--output=json")
 	if err != nil {
 		return
