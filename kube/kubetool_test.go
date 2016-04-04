@@ -91,7 +91,7 @@ func TestPrintRCList(t *testing.T) {
 func TestReload(t *testing.T) {
 	out = os.Stdout
 	kt := Tool{}
-	kt.SetForce(true)
+	kt.SetYes(true)
 
 	// wait rc available
 	rc, err := kt.kubectl.RC("kubetool-test")
@@ -121,7 +121,7 @@ func TestReload(t *testing.T) {
 func TestUpdate(t *testing.T) {
 
 	kt := Tool{}
-	kt.SetForce(true)
+	kt.SetYes(true)
 	require.NoError(t, kt.Update("kubetool-test", "", "1.9.12"))
 
 	rc, err := kt.kubectl.RC("kubetool-test")
