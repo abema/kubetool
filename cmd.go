@@ -18,7 +18,7 @@ var (
 	yes       = app.Flag("yes", "Skip confirmation.").Short('y').Bool()
 	force     = app.Flag("force", "Force reload pods. Ignores pod status while reloading.").Short('f').Bool()
 	interval  = app.Flag("interval", "Reloading interval on restarting each pod.").Default("0").Int()
-	minStable = app.Flag("min-stable", "Minimum value of available pod percentage to detect RC is stable or not. (0.0-1.0). Defalt is 0.8").Float64()
+	minStable = app.Flag("min-stable", "Minimum value of available pod percentage to detect RC is stable or not. (0.0-1.0). Defalt is 0.8").Default("0.8").Float64()
 
 	// command info
 	info = app.Command("info", "Print cluster & version info about cluster.").Alias("i")
@@ -47,27 +47,26 @@ var (
 	fixVersionName = fixVersion.Arg("rc-name", "Name of target RC.").Required().String()
 )
 
+func init() {
+	app.Version("0.1.0")
+}
+
 func main() {
+
+	cmd := kingpin.MustParse(app.Parse(os.Args[1:]))
 
 	ktool := kube.Tool{}
 	ktool.SetYes(*yes)
 	ktool.SetForce(*force)
 	ktool.SetInterval(*interval)
 
+	if namespace != nil {
+		ktool.SetNamespace(*namespace)
+	}
+
 	if *minStable < 0 || *minStable > 1 {
 		fmt.Fprintln(os.Stderr, "minimum stable rate must be in range of 0.0-1.0")
 		os.Exit(1)
-	}
-
-	if *minStable == 0 {
-		ktool.SetMinimumStable(0.8)
-	} else {
-		ktool.SetMinimumStable(*minStable)
-	}
-
-	cmd := kingpin.MustParse(app.Parse(os.Args[1:]))
-	if namespace != nil {
-		ktool.SetNamespace(*namespace)
 	}
 
 	var err error
