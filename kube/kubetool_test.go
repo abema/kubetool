@@ -27,6 +27,29 @@ func TestSetForce(t *testing.T) {
 	assert.False(t, kt.force)
 }
 
+func TestSetYes(t *testing.T) {
+	kt := Tool{}
+	assert.False(t, kt.yes)
+	kt.SetYes(true)
+	assert.True(t, kt.yes)
+	kt.SetYes(false)
+	assert.False(t, kt.yes)
+}
+
+func TestSetInterval(t *testing.T) {
+	kt := Tool{}
+	assert.Equal(t, 0, kt.interval)
+	kt.SetInterval(10)
+	assert.Equal(t, 10, kt.interval)
+}
+
+func TestSetMinimumStable(t *testing.T) {
+	kt := Tool{}
+	assert.Equal(t, float64(0), kt.minStable)
+	kt.SetMinimumStable(0.8)
+	assert.Equal(t, float64(0.8), kt.minStable)
+}
+
 func TestPrintInfo(t *testing.T) {
 	b := bytes.Buffer{}
 	out = &b
@@ -73,7 +96,7 @@ func TestReload(t *testing.T) {
 	// wait rc available
 	rc, err := kt.kubectl.RC("kubetool-test")
 	require.NoError(t, err)
-	require.NoError(t, kt.waitRCAvailable(rc.Name))
+	require.NoError(t, kt.waitRCAvailable(rc.Name, []string{}))
 
 	// get pod list of RC
 	olds, err := kt.kubectl.PodList(Selector{"name": "kubetool-test"})
@@ -81,7 +104,7 @@ func TestReload(t *testing.T) {
 	assert.Equal(t, 2, len(olds))
 
 	// reload all
-	kt.Reload("kubetool-test", 0, false)
+	kt.Reload("kubetool-test", false)
 
 	// get new pod list of RC
 	news, err := kt.kubectl.PodList(Selector{"name": "kubetool-test"})

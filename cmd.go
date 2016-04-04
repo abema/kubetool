@@ -15,7 +15,10 @@ var (
 	app       = kingpin.New("kubetool", "kubernetes bulk task executor.")
 	verbose   = app.Flag("verbose", "Enable verbose log.").Short('v').Bool()
 	namespace = app.Flag("namespace", "Target namespace. default is all namespaces").String()
-	force     = app.Flag("yes", "Skip confirmation.").Short('y').Bool()
+	yes       = app.Flag("yes", "Skip confirmation.").Short('y').Bool()
+	force     = app.Flag("force", "Force reload pods. Ignores pod status while reloading.").Short('f').Bool()
+	interval  = app.Flag("interval", "Reloading interval on restarting each pod.").Default("0").Int()
+	minStable = app.Flag("min-stable", "Minimum value of available pod percentage to detect RC is stable or not. (0.0-1.0). Defalt is 0.8").Float64()
 
 	// command info
 	info = app.Command("info", "Print cluster & version info about cluster.").Alias("i")
@@ -28,30 +31,38 @@ var (
 	podRC = pod.Flag("rc", "rc name for pod target").String()
 
 	// command reload
-	reload         = app.Command("reload", "Reload all pods in rc.")
-	reloadName     = reload.Arg("name", "Name of target RC.").Required().String()
-	reloadInterval = reload.Flag("interval", "Update interval seconds between pods.").Default("0").Int()
-	reloadOne      = reload.Flag("1", "Reload only 1 pod").Bool()
+	reload     = app.Command("reload", "Reload all pods in rc.")
+	reloadName = reload.Arg("rc-name", "Name of target RC.").Required().String()
+	reloadOne  = reload.Flag("1", "Reload only 1 pod").Bool()
 
 	// command set version
 	update          = app.Command("update", "Update image version of rc")
-	updateName      = update.Arg("name", "Name of target RC.").Required().String()
+	updateName      = update.Arg("rc-name", "Name of target RC.").Required().String()
 	updateVersion   = update.Arg("version", "Version strings of image.").Required().String()
 	updateReload    = update.Flag("reload", "Reload pods after update.").Bool()
 	updateReloadOne = update.Flag("1", "Reload only 1 pod after update.").Short('1').Bool()
 	updateContainer = update.Flag("container", "Target container name. Default is first container in defs.").Short('c').String()
-	updateInterval  = update.Flag("interval", "Reloading interval after update.").Default("0").Int()
 
-	fixVersion         = app.Command("fix-version", "Fix all pods to destroy all that has different version of RC ones.")
-	fixVersionName     = fixVersion.Arg("name", "Name of target RC.").Required().String()
-	fixVersionInterval = fixVersion.Flag("interval", "Reloading interval after update.").Default("0").Int()
+	fixVersion     = app.Command("fix-version", "Fix all pods to destroy all that has different version of RC ones.")
+	fixVersionName = fixVersion.Arg("rc-name", "Name of target RC.").Required().String()
 )
 
 func main() {
 
 	ktool := kube.Tool{}
-	if force != nil {
-		ktool.SetForce(*force)
+	ktool.SetYes(*yes)
+	ktool.SetForce(*force)
+	ktool.SetInterval(*interval)
+
+	if *minStable < 0 || *minStable > 1 {
+		fmt.Fprintln(os.Stderr, "minimum stable rate must be in range of 0.0-1.0")
+		os.Exit(1)
+	}
+
+	if *minStable == 0 {
+		ktool.SetMinimumStable(0.8)
+	} else {
+		ktool.SetMinimumStable(*minStable)
 	}
 
 	cmd := kingpin.MustParse(app.Parse(os.Args[1:]))
@@ -73,18 +84,18 @@ func main() {
 		}
 		err = ktool.PrintPodList(rcname)
 	case reload.FullCommand():
-		err = ktool.Reload(*reloadName, *reloadInterval, *reloadOne)
+		err = ktool.Reload(*reloadName, *reloadOne)
 	case update.FullCommand():
 		container := ""
 		if updateContainer != nil {
 			container = *updateContainer
 		}
 		err = ktool.Update(*updateName, container, *updateVersion)
-		if *updateReload && err != nil {
-			err = ktool.Reload(*updateName, *updateInterval, *updateReloadOne)
+		if *updateReload && err == nil {
+			err = ktool.Reload(*updateName, *updateReloadOne)
 		}
 	case fixVersion.FullCommand():
-		err = ktool.FixVersion(*fixVersionName, *fixVersionInterval)
+		err = ktool.FixVersion(*fixVersionName)
 	}
 	if err != nil {
 		fmt.Println(red(err.Error()))

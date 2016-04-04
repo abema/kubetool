@@ -31,8 +31,11 @@ var (
 
 // Tool is to execute batch tasks using kubectl command.
 type Tool struct {
-	kubectl Kubectl
-	force   bool
+	kubectl   Kubectl
+	yes       bool
+	force     bool
+	interval  int
+	minStable float64
 }
 
 func init() {
@@ -44,9 +47,24 @@ func (t *Tool) SetNamespace(namespace string) {
 	t.kubectl.Namespace = namespace
 }
 
-// SetForce to skip terminal confirmation.
+// SetYes to skip confirmation.
+func (t *Tool) SetYes(yes bool) {
+	t.yes = yes
+}
+
+// SetForce to reload without status checking.
 func (t *Tool) SetForce(force bool) {
 	t.force = force
+}
+
+// SetInterval seconds between each pod restarts.
+func (t *Tool) SetInterval(interval int) {
+	t.interval = interval
+}
+
+// SetMinimumStable available pods rate to detect RC availability.
+func (t *Tool) SetMinimumStable(minStable float64) {
+	t.minStable = minStable
 }
 
 func newTableWriter() *tablewriter.Table {
@@ -144,11 +162,11 @@ func (t *Tool) PrintRCList() (err error) {
 }
 
 // Reload all or one pod(s) in single rc.
-func (t *Tool) Reload(name string, interval int, one bool) (err error) {
+func (t *Tool) Reload(name string, one bool) (err error) {
 	if one {
-		log("Reloading " + magenta("1") + " pod in replication controller.")
+		log("reloading " + magenta("1") + " pod in replication controller.")
 	} else {
-		log("Reloading " + red("all") + " pods in replication controller.")
+		log("reloading " + red("all") + " pods in replication controller.")
 	}
 	rc, err := t.kubectl.RC(name)
 	if err != nil {
@@ -171,11 +189,15 @@ func (t *Tool) Reload(name string, interval int, one bool) (err error) {
 	}
 
 	for i := range pods {
-		logf("pod[%03d]: %s", i, green(pods[i].Name))
+		if t.podAvailable(pods[i]) {
+			logf("pod[%03d]: %s", i, green(pods[i].Name))
+		} else {
+			logf("pod[%03d]: %s", i, red(pods[i].Name))
+		}
 	}
 	t.confirm("continue?")
 	// do reload
-	err = t.reloadPods(rc, pods, interval)
+	err = t.reloadPods(rc, pods)
 	return
 }
 
@@ -210,7 +232,7 @@ func (t *Tool) Update(name string, container string, version string) (err error)
 
 // FixVersion of pods running on RC with destroying all pods that has
 // different version of RC ones.
-func (t *Tool) FixVersion(name string, interval int) (err error) {
+func (t *Tool) FixVersion(name string) (err error) {
 	rc, err := t.kubectl.RC(name)
 	if err != nil {
 		return
@@ -244,46 +266,73 @@ func (t *Tool) FixVersion(name string, interval int) (err error) {
 	log("rc      :", blue(name))
 
 	for i := range pods {
-		logf("pod[%03d]: %s", i, green(pods[i].Name))
+		if t.podAvailable(pods[i]) {
+			logf("pod[%03d]: %s", i, green(pods[i].Name))
+		} else {
+			logf("pod[%03d]: %s %s", i, red(pods[i].Name), gray("(unavailable)"))
+		}
 	}
 	t.confirm("continue?")
 	// do reload
-	err = t.reloadPods(rc, pods, interval)
+	err = t.reloadPods(rc, pods)
 	return
 }
 
 // reloadPods deletes pods one by one with waiting created pod become available.
-func (t *Tool) reloadPods(rc v1.ReplicationController, pods []v1.Pod, interval int) (err error) {
+func (t *Tool) reloadPods(rc v1.ReplicationController, pods []v1.Pod) (err error) {
 
-	// check all pods available
-	if !t.rcAvailable(rc) {
-		if err = t.waitRCAvailable(rc.Name); err != nil {
-			return
+	livePods := make([]v1.Pod, 0, len(pods))
+	deadPods := make([]v1.Pod, 0, len(pods))
+
+	deletedPods := make([]string, 0, len(pods))
+
+	// separate dead/live pods
+	for i := range pods {
+		if t.podAvailable(pods[i]) {
+			livePods = append(livePods, pods[i])
+		} else {
+			deadPods = append(deadPods, pods[i])
 		}
 	}
+	// delete dead pods first without waiting availability.
+	for i := range deadPods {
+		logf("deleting pod %s...", red(deadPods[i].Name))
+		if err = t.kubectl.DeletePod(deadPods[i].Name); err != nil {
+			return
+		}
+		deletedPods = append(deletedPods, deadPods[i].Name)
+	}
+
+	// wait for availability
+	t.waitRCAvailable(rc.Name, deletedPods)
 
 	// delete pods one by one.
-	for i := range pods {
-		logf("Deleting %s...", green(pods[i].Name))
-		if err = t.kubectl.DeletePod(pods[i].Name); err != nil {
+	for i := range livePods {
+		logf("deleting pod %s...", green(livePods[i].Name))
+		if err = t.kubectl.DeletePod(livePods[i].Name); err != nil {
 			return
 		}
-		// wait for specified interval seconds
-		if err = t.waitRCAvailable(rc.Name); err != nil {
+		deletedPods = append(deletedPods, livePods[i].Name)
+		// wait for specified interval seconds.
+		if err = t.waitRCAvailable(rc.Name, deletedPods); err != nil {
 			return
 		}
-		if interval > 0 {
-			time.Sleep(time.Duration(interval) * time.Second)
+		if t.interval > 0 {
+			time.Sleep(time.Duration(t.interval) * time.Second)
 		}
 	}
 
-	log(green("Done reloading pods"))
+	log(green("done reloading pods"))
 	return
 }
 
 // waitRCAvailable for 1 minutes, exit to abort when not available.
-func (t *Tool) waitRCAvailable(name string) (err error) {
-	log("Wait until all pods available...")
+// Providing ignoreNames will mark as failed even if pod has same name is available.
+func (t *Tool) waitRCAvailable(name string, ignoreNames []string) (err error) {
+	if t.force {
+		return
+	}
+	first := true
 	avail := false
 	// wait for about a minute to available all pods includes recreated.
 	for i := 0; i < 10; i++ {
@@ -292,16 +341,19 @@ func (t *Tool) waitRCAvailable(name string) (err error) {
 		if err != nil {
 			return err
 		}
-		avail = t.rcAvailable(rc)
+		avail = t.rcAvailable(rc, ignoreNames)
 		if avail {
 			break
+		}
+		if first {
+			first = false
 		}
 		// wait for 5 seconds
 		time.Sleep(time.Second * 5)
 	}
 	// exit when pod is unavailable
 	if !avail {
-		return errors.New("RC is not stable stauts")
+		return errors.New("RC does not have enough stable pods. Use -f to force reloading pods")
 	}
 	return
 }
@@ -331,29 +383,49 @@ func pickContainer(rc v1.ReplicationController, container string) (c v1.Containe
 }
 
 // check rc status.
-func (t *Tool) rcAvailable(rc v1.ReplicationController) bool {
+func (t *Tool) rcAvailable(rc v1.ReplicationController, ignorePods []string) bool {
 	// check pods count reaches rc desied.
-	curr := rc.Status.Replicas
 	total := *rc.Spec.Replicas
-	if curr != total {
-		return false
-	}
 	// check all pod status.
 	pods, err := t.kubectl.PodList(rc.Spec.Selector)
 	if err != nil {
 		log(red(err.Error()))
 		return false
 	}
-	// check actual pod count equals to spec.
-	if len(pods) != total {
-		return false
+	// minimum available requirement pods
+	reqNum := int(float64(total) * t.minStable)
+	if reqNum < 1 {
+		reqNum = 1
 	}
+	if reqNum > total {
+		reqNum = total
+	}
+	// count available pods
+	availCount := 0
 	for i := range pods {
-		if !t.podAvailable(pods[i]) {
-			return false
+		// check ignore pods
+		if contains(pods[i].Name, ignorePods) {
+			continue
+		}
+		if t.podAvailable(pods[i]) {
+			availCount++
 		}
 	}
-	return true
+	// RC is available when available pods > required pods
+	if availCount > reqNum {
+		return true
+	}
+	log("waiting", blue(strconv.Itoa(reqNum-availCount+1)), "more pod(s) become available. ("+blue(strconv.Itoa(availCount))+"/"+blue(strconv.Itoa(*rc.Spec.Replicas))+")")
+	return false
+}
+
+func contains(item string, list []string) bool {
+	for i := range list {
+		if list[i] == item {
+			return true
+		}
+	}
+	return false
 }
 
 // check pod status.
@@ -362,12 +434,12 @@ func (t *Tool) podAvailable(pod v1.Pod) bool {
 		return false
 	}
 	for _, cs := range pod.Status.ContainerStatuses {
-		// must be running
-		if cs.State.Running == nil {
-			return false
-		}
 		// must be ready
 		if !cs.Ready {
+			return false
+		}
+		// must be running
+		if cs.State.Running == nil {
 			return false
 		}
 	}
@@ -382,7 +454,7 @@ func fail(err error) {
 
 // confirm user input via terminal.
 func (t *Tool) confirm(msg string) {
-	if t.force {
+	if t.yes {
 		return
 	}
 	fmt.Printf(msg + " (y/N) ")
