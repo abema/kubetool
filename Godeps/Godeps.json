@@ -24,6 +24,10 @@
 			"Rev": "2efee857e7cfd4f3d0138cc3cbb1b4966962b93a"
 		},
 		{
+			"ImportPath": "github.com/buger/goterm",
+			"Rev": "45c1d39fe6b92d222144a46a24b526a452082f0f"
+		},
+		{
 			"ImportPath": "github.com/davecgh/go-spew/spew",
 			"Rev": "5215b55f46b2b919f50a1df0eaa5886afe4e3b3d"
 		},
@@ -43,15 +47,6 @@
 		{
 			"ImportPath": "github.com/mattn/go-isatty",
 			"Rev": "56b76bdf51f7708750eac80fa38b952bb9f32639"
-		},
-		{
-			"ImportPath": "github.com/mattn/go-runewidth",
-			"Comment": "travisish-37-g12e0ff7",
-			"Rev": "12e0ff74603c9a3209d8bf84f8ab349fe1ad9477"
-		},
-		{
-			"ImportPath": "github.com/olekukonko/tablewriter",
-			"Rev": "cca8bbc0798408af109aaaa239cbd2634846b340"
 		},
 		{
 			"ImportPath": "github.com/pmezard/go-difflib/difflib",

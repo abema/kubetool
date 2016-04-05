@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/buger/goterm"
 	"github.com/fatih/color"
-	"github.com/olekukonko/tablewriter"
 )
 
 var (
@@ -65,17 +65,6 @@ func (t *Tool) SetMinimumStable(minStable float64) {
 	t.minStable = minStable
 }
 
-func newTableWriter() *tablewriter.Table {
-	w := tablewriter.NewWriter(out)
-	w.SetAlignment(tablewriter.ALIGN_LEFT)
-	w.SetBorder(false)
-	w.SetHeaderLine(false)
-	w.SetRowLine(false)
-	w.SetColumnSeparator("")
-	w.SetCenterSeparator("")
-	return w
-}
-
 // PrintInfo writes version of target cluster.
 func (t *Tool) PrintInfo() (err error) {
 	c, s, err := t.kubectl.Version()
@@ -100,12 +89,17 @@ func (t *Tool) PrintContext() (err error) {
 
 // PrintPodList print images of running pods in specific RC.
 func (t *Tool) PrintPodList(rcname string) (err error) {
-	pods, err := t.kubectl.PodList(nil)
+	var selector Selector
+	if rcname != "" {
+		selector = Selector{"name": rcname}
+	}
+
+	pods, err := t.kubectl.PodList(selector)
 	if err != nil {
 		return
 	}
-	w := newTableWriter()
-	w.SetHeader([]string{"name", "status", "R", "pod ip", "node ip", "image", "version"})
+	w := goterm.NewTable(0, 4, 1, ' ', 0)
+	fmt.Fprintf(w, "NAME\tSTATUS\tR\tPOD IP\tNODE IP\tIMAGE\tVERSION\n")
 	for _, pod := range pods {
 		for i, container := range pod.Spec.Containers {
 			cstate := pod.Status.ContainerStatuses[i].State
@@ -116,18 +110,17 @@ func (t *Tool) PrintPodList(rcname string) (err error) {
 				status = "Waiting"
 			}
 			img, ver := parseImage(container.Image)
-			w.Append([]string{
+			fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%s\t%s\t%s\n",
 				pod.Name,
 				status,
-				strconv.Itoa(int(pod.Status.ContainerStatuses[i].RestartCount)),
+				pod.Status.ContainerStatuses[i].RestartCount,
 				pod.Status.PodIP,
 				pod.Status.HostIP,
-				img,
-				ver,
-			})
+				img, ver,
+			)
 		}
 	}
-	w.Render()
+	fmt.Println(w.String())
 	return
 }
 
@@ -137,8 +130,8 @@ func (t *Tool) PrintRCList() (err error) {
 	if err != nil {
 		return
 	}
-	w := newTableWriter()
-	w.SetHeader([]string{"name", "replicas", "image", "version"})
+	w := goterm.NewTable(0, 4, 1, ' ', 0)
+	fmt.Fprintf(w, "NAME\tREPLICAS\tIMAGE\tVERSION\n")
 	for _, rc := range rcs {
 		rcSpec := rc.Spec
 		if rcSpec.Template == nil {
@@ -147,15 +140,13 @@ func (t *Tool) PrintRCList() (err error) {
 		podSpec := rcSpec.Template.Spec
 		for _, container := range podSpec.Containers {
 			img, ver := parseImage(container.Image)
-			w.Append([]string{
-				rc.Name,
-				fmt.Sprintf("%d/%d", rc.Status.Replicas, *rcSpec.Replicas),
-				img,
-				ver,
-			})
+			fmt.Fprintf(w, "%s\t%d/%d\t%s\t%s\n",
+				rc.Name, rc.Status.Replicas, *rcSpec.Replicas, img, ver,
+			)
 		}
 	}
-	w.Render()
+	fmt.Println(w.String())
+	//goterm.Println(w)
 	return
 }
 
