@@ -72,8 +72,15 @@ kubetool update nginx 1.9.2 --reload
 ```
 
 with reload only 1 pod
+
 ```
 kubetool update nginx 1.9.2 --reload --1
+```
+
+You can also select/input version in console,
+
+```
+kubetool update
 ```
 
 ### Fix version
