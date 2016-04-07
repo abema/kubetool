@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -204,6 +206,14 @@ func (t *Tool) Update(name string, container string, version string) (err error)
 	t.PrintContext()
 	log("RC       :", green(name))
 	log("Container:", green(name))
+
+	if version == "" {
+		version, err = t.selectVersion(rc, container)
+		if err != nil {
+			return
+		}
+	}
+
 	log("Image    :", magenta(img)+":"+yellow(ver))
 	log("       ->:", magenta(img)+":"+bold(yellow(version)))
 	t.confirm("continue?")
@@ -217,6 +227,48 @@ func (t *Tool) Update(name string, container string, version string) (err error)
 	}
 	log(green("Successfully patched"))
 	return
+}
+
+func (t *Tool) selectVersion(rc ReplicationController, container string) (version string, err error) {
+	pods, err := t.kubectl.PodList(Selector{"name": rc.Name})
+	if err != nil {
+		return
+	}
+	vermap := map[string]int{}
+	for i := range pods {
+		c, err := pickPodContainer(pods[i], container)
+		if err != nil {
+			return version, err
+		}
+		_, ver := parseImage(c.Image)
+		vermap[ver]++
+	}
+	vers := make([]string, 0, len(vermap))
+	for k := range vermap {
+		vers = append(vers, k)
+	}
+	sort.Strings(vers)
+	log("Current versions")
+	for i, ver := range vers {
+		logf("[%s] - %s", blue("%d", i), yellow(ver))
+	}
+
+	fmt.Print("choose or input version: ")
+	res := ""
+	fmt.Scanf("%s", &res)
+	// if number set, use version from list
+	if regexp.MustCompile("^[0-9]+$").MatchString(res) {
+		idx, err := strconv.Atoi(res)
+		if err != nil {
+			return "", err
+		}
+		if idx < 0 || idx >= len(vers) {
+			err = errors.New("version index out of range")
+			return "", err
+		}
+		return vers[idx], nil
+	}
+	return strings.Trim(res, " \n\t"), nil
 }
 
 // FixVersion of pods running on RC with destroying all pods that has
@@ -360,6 +412,20 @@ func parseImage(img string) (name string, version string) {
 // pickContainer from pods.
 func pickContainer(rc ReplicationController, container string) (c Container, err error) {
 	cs := rc.Spec.Template.Spec.Containers
+	if container == "" {
+		return cs[0], nil
+	}
+	for i := range cs {
+		if cs[i].Name == container {
+			return cs[i], nil
+		}
+	}
+	return c, fmt.Errorf("container not found: %s", container)
+}
+
+// pickPodContainer get named container from pod.
+func pickPodContainer(pod Pod, container string) (c Container, err error) {
+	cs := pod.Spec.Containers
 	if container == "" {
 		return cs[0], nil
 	}

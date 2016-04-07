@@ -38,7 +38,7 @@ var (
 	// command set version
 	update          = app.Command("update", "Update image version of rc")
 	updateName      = update.Arg("rc-name", "Name of target RC.").Required().String()
-	updateVersion   = update.Arg("version", "Version strings of image.").Required().String()
+	updateVersion   = update.Arg("version", "Version tag of image.").String()
 	updateReload    = update.Flag("reload", "Reload pods after update.").Bool()
 	updateReloadOne = update.Flag("1", "Reload only 1 pod after update.").Short('1').Bool()
 	updateContainer = update.Flag("container", "Target container name. Default is first container in defs.").Short('c').String()
