@@ -1,5 +1,10 @@
 # kubetool
 
+[![Github Releases](https://img.shields.io/github/downloads/abema/kubetool/total.svg?maxAge=3600)](https://github.com/abema/kubetool/releases)
+[![Go Report Card](https://goreportcard.com/badge/github.com/abema/kubetool)](https://goreportcard.com/report/github.com/abema/kubetool)
+[![GoDoc](https://godoc.org/github.com/abema/kubetool?status.svg)](https://godoc.org/github.com/abema/kubetool)
+[![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)](https://raw.githubusercontent.com/abema/kubetool/master/LICENSE)
+
 kubetool is the tool that supports utility tasks which kubectl doesn't have.
 
 ## Install
