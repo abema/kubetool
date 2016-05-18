@@ -173,6 +173,14 @@ func (t *Tool) Reload(name string, one bool) (err error) {
 	}
 	t.PrintContext()
 	log("rc      :", blue(name))
+	rspec := rc.Spec.Template.Spec
+	for i := range rspec.Containers {
+		if i == 0 {
+			log("image(s):", blue(rspec.Containers[i].Image))
+			continue
+		}
+		log("         ", blue(rspec.Containers[i].Image))
+	}
 
 	// first pod only
 	if one {
@@ -305,6 +313,13 @@ func (t *Tool) FixVersion(name string) (err error) {
 
 	t.PrintContext()
 	log("rc      :", blue(name))
+	for i := range rspec.Containers {
+		if i == 0 {
+			log("image(s):", blue(rspec.Containers[i].Image))
+			continue
+		}
+		log("         ", blue(rspec.Containers[i].Image))
+	}
 
 	for i := range pods {
 		if t.podAvailable(pods[i]) {
